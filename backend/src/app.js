@@ -10,7 +10,8 @@ const interviewRoutes = require('./routes/interviewRoutes');
 const app = express();
 
 // Middleware
-app.use(cors());
+// app.use(cors());
+app.use(cors({ origin: 'https://lumora-frontend-seven.vercel.app' }));
 app.use(express.json());
 
 // Routes
@@ -20,6 +21,6 @@ app.use('/api/career', careerRoutes);
 app.use('/api/interview', interviewRoutes);
 
 // Static folder for uploads (optional/if needed for direct access)
-app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
+//app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 
 module.exports = app;
