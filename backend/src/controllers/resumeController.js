@@ -8,34 +8,88 @@ const { generateOptimizedResume } = require('../services/optimizeService');
 // @desc    Upload and process resume
 // @route   POST /api/resume/upload
 // @access  Private
+// const uploadResume = async (req, res) => {
+//     try {
+//         if (!req.file) {
+//             return res.status(400).json({ message: 'No file uploaded' });
+//         }
+
+//         const filePath = req.file.path;
+
+//         // 1. Extract Text
+//         const extractedText = await extractTextFromPDF(filePath);
+
+//         // 2. Parse with AI
+//         const parsedData = await parseResumeWithAI(extractedText);
+
+//         // Get JD from body
+//         const { jobDescription } = req.body;
+
+//         // 3. ATS Score with JD context
+//         const atsResult = await calculateATSScore(parsedData, jobDescription);
+
+//         // 4. Save to DB
+//         const resume = await Resume.create({
+//             user: req.user._id,
+//             fileName: req.file.originalname,
+//             filePath: filePath,
+//             extractedText,
+//             jobDescription: jobDescription || "",
+//             // Map flat fields
+//             personalInfo: parsedData.personalInfo,
+//             summary: parsedData.summary,
+//             skills: parsedData.skills,
+//             experiences: parsedData.experiences,
+//             education: parsedData.education,
+//             projects: parsedData.projects,
+//             certifications: parsedData.certifications,
+//             achievements: parsedData.achievements,
+//             activities: parsedData.activities,
+//             volunteering: parsedData.volunteering,
+//             workshops: parsedData.workshops,
+
+//             atsScore: atsResult.atsScore || 0,
+//             atsFeedback: atsResult.atsFeedback || "No feedback generated",
+//         });
+//         res.status(201).json(resume);
+
+//     } catch (error) {
+//         console.error(error);
+//         // Cleanup file if error
+//         if (req.file && fs.existsSync(req.file.path)) {
+//             // fs.unlinkSync(req.file.path); // Optional: keep for debug
+//         }
+//         res.status(500).json({ message: 'Resume processing failed', error: error.message });
+//     }
+// };
+
 const uploadResume = async (req, res) => {
     try {
         if (!req.file) {
             return res.status(400).json({ message: 'No file uploaded' });
         }
 
-        const filePath = req.file.path;
+        const fileBuffer = req.file.buffer;
+        const originalName = req.file.originalname;
 
-        // 1. Extract Text
-        const extractedText = await extractTextFromPDF(filePath);
+        // 1. Extract Text from buffer
+        const extractedText = await extractTextFromPDF(fileBuffer);
 
         // 2. Parse with AI
         const parsedData = await parseResumeWithAI(extractedText);
 
-        // Get JD from body
         const { jobDescription } = req.body;
 
-        // 3. ATS Score with JD context
+        // 3. ATS Score
         const atsResult = await calculateATSScore(parsedData, jobDescription);
 
-        // 4. Save to DB
+        // 4. Save to DB (no filePath)
         const resume = await Resume.create({
             user: req.user._id,
-            fileName: req.file.originalname,
-            filePath: filePath,
+            fileName: originalName,
+            filePath: "", // no file saved
             extractedText,
             jobDescription: jobDescription || "",
-            // Map flat fields
             personalInfo: parsedData.personalInfo,
             summary: parsedData.summary,
             skills: parsedData.skills,
@@ -47,18 +101,13 @@ const uploadResume = async (req, res) => {
             activities: parsedData.activities,
             volunteering: parsedData.volunteering,
             workshops: parsedData.workshops,
-
             atsScore: atsResult.atsScore || 0,
             atsFeedback: atsResult.atsFeedback || "No feedback generated",
         });
-        res.status(201).json(resume);
 
+        res.status(201).json(resume);
     } catch (error) {
         console.error(error);
-        // Cleanup file if error
-        if (req.file && fs.existsSync(req.file.path)) {
-            // fs.unlinkSync(req.file.path); // Optional: keep for debug
-        }
         res.status(500).json({ message: 'Resume processing failed', error: error.message });
     }
 };
@@ -132,26 +181,44 @@ const getResumeById = async (req, res) => {
 // @desc    Delete resume
 // @route   DELETE /api/resume/:id
 // @access  Private
+// const deleteResume = async (req, res) => {
+//     try {
+//         const resume = await Resume.findById(req.params.id);
+
+//         if (!resume) {
+//             return res.status(404).json({ message: 'Resume not found' });
+//         }
+
+//         // Check user
+//         if (!resume.user.equals(req.user._id)) {
+//             return res.status(401).json({ message: 'User not authorized' });
+//         }
+
+//         // Remove file from filesystem
+//         if (fs.existsSync(resume.filePath)) {
+//             fs.unlinkSync(resume.filePath);
+//         }
+
+//         await resume.deleteOne();
+
+//         res.json({ message: 'Resume removed' });
+//     } catch (error) {
+//         res.status(500).json({ message: error.message });
+//     }
+// };
+
 const deleteResume = async (req, res) => {
     try {
         const resume = await Resume.findById(req.params.id);
+        if (!resume) return res.status(404).json({ message: 'Resume not found' });
+        if (!resume.user.equals(req.user._id)) return res.status(401).json({ message: 'User not authorized' });
 
-        if (!resume) {
-            return res.status(404).json({ message: 'Resume not found' });
-        }
-
-        // Check user
-        if (!resume.user.equals(req.user._id)) {
-            return res.status(401).json({ message: 'User not authorized' });
-        }
-
-        // Remove file from filesystem
-        if (fs.existsSync(resume.filePath)) {
+        // Remove file only if path exists and is not empty
+        if (resume.filePath && resume.filePath !== "" && fs.existsSync(resume.filePath)) {
             fs.unlinkSync(resume.filePath);
         }
 
         await resume.deleteOne();
-
         res.json({ message: 'Resume removed' });
     } catch (error) {
         res.status(500).json({ message: error.message });
